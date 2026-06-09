@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Share2, Check, Rocket } from "lucide-react";
+import { ArrowLeft, Share2, Check, Rocket, Layout } from "lucide-react";
 import Link from "next/link";
 import Navbar from "../../../components/Navbar";
 import ViabilityRadar from "../../../components/ViabilityRadar";
@@ -60,7 +60,15 @@ export default function AnalyzePage() {
               Analyzed {new Date(result.createdAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
             </p>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+            <Link
+              href={`/landing/${id}`}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all"
+              style={{ background: "rgba(124,77,255,0.12)", border: "1px solid rgba(124,77,255,0.35)", color: "#a78bfa" }}
+            >
+              <Layout size={14} />
+              Landing Page
+            </Link>
             <button onClick={share}
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all"
               style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--muted)" }}>
@@ -89,15 +97,23 @@ export default function AnalyzePage() {
         <ActionPlan actions={result.actions} />
 
         {/* CTA */}
-        <div className="glow-card p-6 text-center space-y-3">
+        <div className="glow-card p-6 text-center space-y-4">
           <Rocket size={28} style={{ color: "var(--accent)", margin: "0 auto" }} />
-          <h3 className="font-semibold text-lg">Ready to build?</h3>
+          <h3 className="font-semibold text-lg">Ready to launch?</h3>
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            You have the market data, the name, and the pitch. Now ship it.
+            You have the market data, the name, and the pitch. Turn it into a live landing page in 30 seconds.
           </p>
-          <Link href="/" className="btn-primary inline-flex items-center gap-2 px-6 py-3 text-sm">
-            Validate another idea
-          </Link>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link href={`/landing/${id}`}
+              className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-xl"
+              style={{ background: "linear-gradient(135deg, #7c4dff, #4f8ef7)", color: "#fff", boxShadow: "0 4px 20px rgba(124,77,255,0.35)" }}>
+              <Layout size={16} />
+              Generate Landing Page
+            </Link>
+            <Link href="/" className="btn-primary inline-flex items-center gap-2 px-6 py-3 text-sm">
+              Validate another idea
+            </Link>
+          </div>
         </div>
       </main>
     </div>
