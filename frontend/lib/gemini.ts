@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { AnalysisResult, ViabilityScore, Competitor, PitchVariant, MarketInsight, ActionStep } from "./types";
 
 type IdeaCategory = "saas" | "consumer" | "marketplace" | "health" | "finance" | "food" | "education" | "ai";
@@ -118,93 +117,42 @@ function generateId(): string {
 
 export async function analyzeIdea(
   idea: string,
-  apiKey: string,
+  clientKey: string,
   onToken: (token: string) => void
 ): Promise<AnalysisResult> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  // Call server-side API route — key never exposed in browser network requests
+  onToken("Analyzing your idea...");
+  const res = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idea, clientKey }),
+  });
 
-  const prompt = `You are a startup analyst AI. Analyze this startup idea and return ONLY valid JSON (no markdown, no explanation):
-
-Idea: "${idea}"
-
-Return this exact JSON structure:
-{
-  "viability": {
-    "market": <0-100 score for market size/demand>,
-    "competition": <0-100 score for competitive advantage>,
-    "monetization": <0-100 score for revenue potential>,
-    "technical": <0-100 score for technical feasibility>,
-    "timing": <0-100 score for market timing>,
-    "uniqueness": <0-100 score for differentiation>,
-    "overall": <weighted average 0-100>
-  },
-  "market": {
-    "tam": "<estimated total addressable market, e.g. $4.2B>",
-    "trend": "<growing|stable|declining>",
-    "trendLabel": "<e.g. ↑ 28% YoY>",
-    "competition": "<low|medium|high>",
-    "timeToMarket": "<e.g. 2-4 months>"
-  },
-  "names": [
-    {"name": "<brand name>", "domain": "<name.com or name.io>"},
-    ... 18 more entries, mix of .com .io .ai .co .app suffixes
-  ],
-  "competitors": [
-    {"name": "<company>", "description": "<what they do>", "weakness": "<specific gap your idea exploits>", "url": "<domain if known>"},
-    ... 4 more
-  ],
-  "pitches": [
-    {"type": "twitter", "label": "Twitter / X (280 chars)", "text": "<280 char pitch>"},
-    {"type": "elevator", "label": "Elevator Pitch (30 sec)", "text": "<60-80 word pitch>"},
-    {"type": "investor", "label": "Investor Pitch (2 min)", "text": "<200-250 word investor pitch with market size and business model>"}
-  ],
-  "actions": [
-    {"step": 1, "title": "<action title>", "description": "<specific actionable description>", "timeframe": "<Today|This week|Week 2|Week 3-4|Month 2-3>"},
-    ... 4 more steps
-  ],
-  "summary": "<2-3 sentence honest assessment of the idea's strengths and main risk>"
-}
-
-Be specific and realistic. Names should be creative and brandable. Competitors should be real companies if they exist.`;
-
-  let fullText = "";
-  let streamText = "Analyzing your idea";
-
-  const streamResult = await model.generateContentStream(prompt);
-
-  for await (const chunk of streamResult.stream) {
-    const text = chunk.text();
-    fullText += text;
-    streamText += text.length > 0 ? "." : "";
-    onToken(streamText);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(err.error ?? "Analysis failed. Please try again.");
   }
 
-  try {
-    const jsonMatch = fullText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in response");
-    const parsed = JSON.parse(jsonMatch[0]);
+  const parsed = await res.json();
+  onToken("Done.");
 
-    return {
-      id: generateId(),
-      idea,
-      createdAt: new Date().toISOString(),
-      viability: parsed.viability,
-      market: parsed.market,
-      names: (parsed.names || []).slice(0, 20).map((n: { name: string; domain: string }) => ({
-        name: n.name,
-        domain: n.domain,
-        available: null,
-        checking: true,
-      })),
-      competitors: parsed.competitors || [],
-      pitches: parsed.pitches || [],
-      actions: parsed.actions || [],
-      summary: parsed.summary || "",
-    };
-  } catch {
-    throw new Error("Failed to parse AI response. Please try again.");
-  }
+  return {
+    id: generateId(),
+    idea,
+    createdAt: new Date().toISOString(),
+    viability: parsed.viability,
+    market: parsed.market,
+    names: (parsed.names || []).slice(0, 20).map((n: { name: string; domain: string }) => ({
+      name: n.name,
+      domain: n.domain,
+      available: null,
+      checking: true,
+    })),
+    competitors: parsed.competitors || [],
+    pitches: parsed.pitches || [],
+    actions: parsed.actions || [],
+    summary: parsed.summary || "",
+  };
 }
 
 export function getDemoAnalysis(idea: string): AnalysisResult {
