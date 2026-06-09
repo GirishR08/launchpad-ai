@@ -2,14 +2,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Rocket, History, Settings, Key } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getApiKey, saveApiKey } from "../lib/storage";
 
 export default function Navbar() {
   const path = usePathname();
   const [showKey, setShowKey] = useState(false);
   const [tempKey, setTempKey] = useState("");
-  const hasKey = typeof window !== "undefined" && !!getApiKey();
+  const [hasKey, setHasKey] = useState(false);
+
+  useEffect(() => {
+    setHasKey(!!getApiKey());
+  }, []);
 
   return (
     <nav
@@ -30,7 +34,7 @@ export default function Navbar() {
           <span className="hidden sm:inline">History</span>
         </Link>
         <button
-          onClick={() => setShowKey(!showKey)}
+          onClick={() => { setTempKey(getApiKey()); setShowKey(!showKey); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors"
           style={{ color: "var(--muted)" }}
           title="Set API Key"
@@ -42,22 +46,31 @@ export default function Navbar() {
         <div className="absolute top-full right-4 mt-2 w-72 glow-card p-4 space-y-3 z-50">
           <div className="flex items-center gap-2 text-sm font-medium">
             <Settings size={14} style={{ color: "var(--accent)" }} />
-            Gemini API Key
+            API Key (Groq or Gemini)
           </div>
           <input
             type="password"
-            defaultValue={typeof window !== "undefined" ? getApiKey() : ""}
+            value={tempKey}
             onChange={(e) => setTempKey(e.target.value)}
-            placeholder="AIza..."
+            placeholder="gsk_ or AIza..."
             className="w-full px-3 py-2 rounded-lg text-sm outline-none"
             style={{ background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}
           />
           <button
-            onClick={() => { saveApiKey(tempKey); setShowKey(false); }}
+            onClick={() => { saveApiKey(tempKey); setHasKey(!!tempKey); setShowKey(false); }}
             className="btn-primary w-full px-3 py-2 text-sm"
           >
             Save Key
           </button>
+          {tempKey && (
+            <button
+              onClick={() => { saveApiKey(""); setHasKey(false); setTempKey(""); setShowKey(false); }}
+              className="w-full px-3 py-1.5 text-xs rounded-lg"
+              style={{ color: "var(--muted)", background: "var(--surface2)", border: "1px solid var(--border)" }}
+            >
+              Clear key
+            </button>
+          )}
         </div>
       )}
     </nav>
