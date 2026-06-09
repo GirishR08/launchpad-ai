@@ -69,9 +69,11 @@ Generate exactly 20 names with mix of .com .io .ai .co .app suffixes. 5 competit
     const parsed = JSON.parse(jsonMatch[0]);
     return NextResponse.json(parsed);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "Analysis failed";
+    const isKeyError = msg.includes("API_KEY_INVALID") || msg.includes("API key not valid") || msg.includes("400");
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Analysis failed" },
-      { status: 500 }
+      { error: isKeyError ? "Invalid API key — go to aistudio.google.com, create a new key, and paste it in Settings." : msg },
+      { status: isKeyError ? 401 : 500 }
     );
   }
 }
