@@ -1,26 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
-// Key lives on the server — never sent to the browser
-const SERVER_KEY = process.env.GEMINI_API_KEY ?? "";
+const SERVER_KEY = process.env.AI_API_KEY ?? "";
 
-export async function POST(req: NextRequest) {
-  const { idea, clientKey } = await req.json();
-
-  if (!idea || typeof idea !== "string" || idea.length > 500) {
-    return NextResponse.json({ error: "Invalid idea" }, { status: 400 });
-  }
-
-  // Use server key if set, fall back to user-provided key
-  const key = SERVER_KEY || clientKey;
-  if (!key) {
-    return NextResponse.json({ error: "No API key configured" }, { status: 401 });
-  }
-
-  const genAI = new GoogleGenerativeAI(key);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
-  const prompt = `You are a startup analyst AI. Analyze this startup idea and return ONLY valid JSON (no markdown, no explanation):
+const PROMPT = (idea: string) => `You are a startup analyst AI. Analyze this startup idea and return ONLY valid JSON (no markdown, no explanation):
 
 Idea: "${idea}"
 
@@ -61,19 +44,72 @@ Return this exact JSON structure:
 
 Generate exactly 20 names with mix of .com .io .ai .co .app suffixes. 5 competitors. 5 actions. Be specific and realistic.`;
 
+async function runGroq(idea: string, key: string) {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: PROMPT(idea) }],
+      temperature: 0.7,
+      max_tokens: 4096,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message ?? `Groq error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.choices[0].message.content as string;
+}
+
+async function runGemini(idea: string, key: string) {
+  const genAI = new GoogleGenerativeAI(key);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const result = await model.generateContent(PROMPT(idea));
+  return result.response.text();
+}
+
+function parseResult(text: string) {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("No JSON in response");
+  return JSON.parse(jsonMatch[0]);
+}
+
+function classifyKey(key: string): "groq" | "gemini" | "unknown" {
+  if (key.startsWith("gsk_")) return "groq";
+  if (key.startsWith("AIza")) return "gemini";
+  return "unknown";
+}
+
+export async function POST(req: NextRequest) {
+  const { idea, clientKey } = await req.json();
+
+  if (!idea || typeof idea !== "string" || idea.length > 500) {
+    return NextResponse.json({ error: "Invalid idea" }, { status: 400 });
+  }
+
+  const key = SERVER_KEY || clientKey;
+  if (!key) {
+    return NextResponse.json({ error: "No API key — paste a Groq key (free at console.groq.com) in Settings." }, { status: 401 });
+  }
+
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON in response");
-    const parsed = JSON.parse(jsonMatch[0]);
+    const provider = classifyKey(key);
+    const text = provider === "gemini"
+      ? await runGemini(idea, key)
+      : await runGroq(idea, key); // default to Groq for gsk_ keys and unknown
+
+    const parsed = parseResult(text);
     return NextResponse.json(parsed);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Analysis failed";
-    const isKeyError = msg.includes("API_KEY_INVALID") || msg.includes("API key not valid") || msg.includes("400");
-    return NextResponse.json(
-      { error: isKeyError ? "Invalid API key — go to aistudio.google.com, create a new key, and paste it in Settings." : msg },
-      { status: isKeyError ? 401 : 500 }
-    );
+    if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+      return NextResponse.json({ error: "Invalid API key. Check it in Settings." }, { status: 401 });
+    }
+    if (msg.includes("429") || msg.includes("quota") || msg.includes("Too Many Requests")) {
+      return NextResponse.json({ error: "Quota exceeded. Switch to a Groq key (free at console.groq.com) — no billing required." }, { status: 429 });
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
